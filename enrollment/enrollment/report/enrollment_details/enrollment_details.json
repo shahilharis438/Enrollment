@@ -1,0 +1,26 @@
+{
+ "add_total_row": 0,
+ "columns": [],
+ "creation": "2025-04-10 18:29:38.717992",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "idx": 0,
+ "is_standard": "Yes",
+ "letterhead": null,
+ "modified": "2025-04-10 18:29:38.717992",
+ "modified_by": "Administrator",
+ "module": "enrollment",
+ "name": "Enrollment Details",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Student Enrollment Details",
+ "report_name": "Enrollment Details",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "All"
+  }
+ ]
+}

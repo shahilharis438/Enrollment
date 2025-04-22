@@ -16,6 +16,18 @@ frappe.query_reports["Sale Tracker"] = {
 			fieldtype: "Date",
 			default: frappe.datetime.month_end(),    // optional: set default to month end
 			reqd: 1
-		}
+		},
+		{
+			fieldname: "sales_person",
+			label: "Academic Councelor",
+			fieldtype: "Link",
+			options: "Sales Person",
+		},
+		{
+			fieldname: "product",
+			label: "Product",
+			fieldtype: "Link",
+			options: "Product",
+		},
 	]
 };

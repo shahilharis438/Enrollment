@@ -12,14 +12,16 @@ def execute(filters=None):
         {"label": "Academic Counselor", "fieldname": "acad_coun", "fieldtype": "Link", "options": "Sales Person", "width": 200},
         {"label": "Progress", "fieldname": "progress", "fieldtype": "Data", "width": 180},
         {"label": "SFR", "fieldname": "sfr", "fieldtype": "Data", "width": 120},
+        {"label": "TARGET SFR", "fieldname": "target_sfr", "fieldtype": "Data", "width": 200},
+        {"label": "SFR Percentage", "fieldname": "sfr_perc", "fieldtype": "Data", "width": 200},
         {"label": "ADMS", "fieldname": "adms", "fieldtype": "Data", "width": 100},
         {"label": "Sales Amount", "fieldname": "total_sale_value", "fieldtype": "Currency", "width": 200},
         {"label": "Sales Collection", "fieldname": "sales_collection", "fieldtype": "Currency", "width": 200},
         {"label": "Target", "fieldname": "target", "fieldtype": "Currency", "width": 200},
         {"label": "Outstanding", "fieldname": "outstanding", "fieldtype": "Currency", "width": 200},
+        {"label": "Product", "fieldname": "product", "fieldtype": "Link", "options": "Product", "width": 200},
         {"label": "Target Percentage", "fieldname": "target_perc", "fieldtype": "Data", "width": 200},
         {"label": "ARPU", "fieldname": "arpu", "fieldtype": "Data", "width": 200},
-        {"label": "SFR Percentage", "fieldname": "sfr_perc", "fieldtype": "Data", "width": 200},
         {"label": "ACR", "fieldname": "acr", "fieldtype": "Data", "width": 200},
         {"label": "Installment", "fieldname": "installment", "fieldtype": "Data", "width": 200},
         {"label": "Installment Collection", "fieldname": "installement_collection", "fieldtype": "Currency", "width": 200},
@@ -62,24 +64,31 @@ def execute(filters=None):
             sa.outstanding_amount.as_("outstanding"),
             Sum(sa.connected_calls).as_("sfr"),
             Count(sa.name).as_("adms"),
-            spt.custom_target_sfr.as_("custom_target_sfr"),
+            spt.custom_target_sfr.as_("target_sfr"),
+            sa.course_purchased.as_("product")
         )
         .where((sa.date_of_sale >= filters.start_date) & (sa.date_of_sale <= filters.end_date))
         .groupby(sa.sales_person)
-        .run(as_dict=True)
+        .orderby(sa.connected_calls)
+       
     )
-
+    if filters.sales_person:
+      main_query = main_query.where(sa.sales_person == filters.sales_person)
+    if filters.product:
+      main_query = main_query.where(sa.course_purchased == filters.product)
+    
+    main_query = main_query.run(as_dict=1)
     for row in main_query:
         target = row.get("target") or 0
         sales_collection = row.get("sales_collection") or 0
         total_sale_value = row.get("total_sale_value") or 0
         adms = row.get("adms") or 0
         sfr = row.get("sfr") or 1
-        custom_target_sfr = row.get("custom_target_sfr") or 1
+        target_sfr = row.get("target_sfr") or 1
 
-        row["target_perc"] = (sales_collection / target * 100) if target else 0
-        row["progress"] = (total_sale_value / target * 100) if target else 0
-        row["sfr_perc"] = (sfr / custom_target_sfr * 100) if custom_target_sfr else 0
+        row["target_perc"] = (round(sales_collection / target * 100, 2)) if target else 0
+        row["progress"] = (round(total_sale_value / target * 100, 2)) if target else 0
+        row["sfr_perc"] = (round((sfr / target_sfr)* 100, 2)) if target_sfr else 0
         row["acr"] = (adms / sfr) if sfr else 0
         row["arpu"] = (sales_collection / adms) if adms else 0
 
@@ -89,14 +98,13 @@ def execute(filters=None):
             .from_(sa)
             .select(sa.date_of_sale, Sum(sa.amount_paid).as_("amount_paid"))
             .where(
-                #(sa.date_of_sale >= filters.start_date) &
-                #(sa.date_of_sale <= filters.end_date) &
+                (sa.date_of_sale >= filters.start_date) &
+                (sa.date_of_sale <= filters.end_date) &
                 (sa.sales_person == row["acad_coun"])
             )
             .groupby(sa.date_of_sale)
-            .run(as_dict=True)
+            .run(as_dict=1)
         )
-
         for day_row in daywise_query:
             date_key = day_row.get("date_of_sale")
             if date_key and date_key in date_field:

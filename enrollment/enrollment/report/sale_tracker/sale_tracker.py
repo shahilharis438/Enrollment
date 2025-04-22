@@ -2,10 +2,9 @@
 # For license information, please see license.txt
 
 import frappe
-from frappe.utils import getdate, add_days, formatdate
+from frappe.utils import getdate, add_days
 from frappe.query_builder import DocType
 from frappe.query_builder.functions import Sum, Count
-
 
 def execute(filters=None):
     data = []
@@ -27,51 +26,82 @@ def execute(filters=None):
         {"label": "Revenue", "fieldname": "revenue", "fieldtype": "Currency", "width": 200},
     ]
 
+    sa = DocType("Sales Activity")
+    sp = DocType("Sales Person")
+    spt = DocType("Sales Person Target")
+
+    date_field = {}
+
     if filters and filters.get("start_date") and filters.get("end_date"):
         start_date = getdate(filters.get("start_date"))
         end_date = getdate(filters.get("end_date"))
 
         current_date = start_date
         while current_date <= end_date:
-            label = current_date.strftime("%B %-d") 
-            fieldname = f"day_{current_date.strftime('%Y_%m_%d')}" 
-
+            label = current_date.strftime("%B %-d")
+            fieldname = f"day_{current_date.strftime('%Y_%m_%d')}"
+            date_field[current_date] = fieldname
             columns.append({
                 "label": label,
                 "fieldname": fieldname,
-                "fieldtype": "Data",  
+                "fieldtype": "Currency",
                 "width": 120
             })
-
             current_date = add_days(current_date, 1)
-    
-    sa = DocType("Sales Activity")
-    sp = DocType("Sales Person")
-    spt = DocType("Sales Person Target")
-    query = (
-            frappe.qb
-            .from_(sa)
-            .join(sp)
-            .on(sa.sales_person == sp.sales_person_name)
-            .join(spt)
-            .on(spt.sales_person ==  sa.sales_person)
-            .select(
+
+    main_query = (
+        frappe.qb
+        .from_(sa)
+        .join(sp).on(sa.sales_person == sp.sales_person_name)
+        .join(spt).on(spt.sales_person == sa.sales_person)
+        .select(
             sa.sales_person.as_("acad_coun"),
             Sum(sa.total_sale_value).as_("total_sale_value"),
             Sum(sa.amount_paid).as_("sales_collection"),
-            Sum((sa.amount_paid) / spt.target * 100).as_("target_perc"),
-            Sum((sa.total_sale_value) / spt.target * 100).as_("progress"),
-            spt.target,
+            spt.target.as_("target"),
             sa.outstanding_amount.as_("outstanding"),
             Sum(sa.connected_calls).as_("sfr"),
             Count(sa.name).as_("adms"),
-            Sum((sa.connected_calls) / spt.custom_target_sfr * 100).as_("sfr_perc")
-            
-          )
-          .groupby(sa.sales_person)
-          .run(as_dict=1)
+            spt.custom_target_sfr.as_("custom_target_sfr"),
+        )
+        .where((sa.date_of_sale >= filters.start_date) & (sa.date_of_sale <= filters.end_date))
+        .groupby(sa.sales_person)
+        .run(as_dict=True)
     )
-   
-    for row in query:
+
+    for row in main_query:
+        target = row.get("target") or 0
+        sales_collection = row.get("sales_collection") or 0
+        total_sale_value = row.get("total_sale_value") or 0
+        adms = row.get("adms") or 0
+        sfr = row.get("sfr") or 1
+        custom_target_sfr = row.get("custom_target_sfr") or 1
+
+        row["target_perc"] = (sales_collection / target * 100) if target else 0
+        row["progress"] = (total_sale_value / target * 100) if target else 0
+        row["sfr_perc"] = (sfr / custom_target_sfr * 100) if custom_target_sfr else 0
+        row["acr"] = (adms / sfr) if sfr else 0
+        row["arpu"] = (sales_collection / adms) if adms else 0
+
+       
+        daywise_query = (
+            frappe.qb
+            .from_(sa)
+            .select(sa.date_of_sale, Sum(sa.amount_paid).as_("amount_paid"))
+            .where(
+                #(sa.date_of_sale >= filters.start_date) &
+                #(sa.date_of_sale <= filters.end_date) &
+                (sa.sales_person == row["acad_coun"])
+            )
+            .groupby(sa.date_of_sale)
+            .run(as_dict=True)
+        )
+
+        for day_row in daywise_query:
+            date_key = day_row.get("date_of_sale")
+            if date_key and date_key in date_field:
+                row[date_field[date_key]] = day_row.get("amount_paid") or 0
+
         data.append(row)
+
     return columns, data

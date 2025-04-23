@@ -29,6 +29,19 @@ frappe.ui.form.on("Sales Activity", {
         if (frm.doc.discount_amount && frm.doc.amount_paid) {
             frm.set_value("outstanding_amount", frm.doc.discount_amount - frm.doc.amount_paid);
         }
+    },
+    program_purchased: function (frm) {
+        if (frm.doc.program_purchased) {
+            frappe.db.get_value("Fee Structure", { "program": frm.doc.program_purchased }, "total_amount")
+                .then(r => {
+                    if (r && r.message && r.message.total_amount) {
+                        frm.set_value("total_sale_value", r.message.total_amount);
+                    }
+                    else{
+                        frm.set_value("total_sale_value", 0)
+                    }
+                });
+        }
     }
 
 });

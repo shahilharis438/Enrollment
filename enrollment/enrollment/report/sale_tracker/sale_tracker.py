@@ -152,4 +152,5 @@ def execute(filters=None):
         chart['data']['labels'].append(data_row['sales_person'])
         percentage = (data_row['total_sale_value'] / data_row['target'])*100
         chart['data']['datasets'][0]['values'].append(percentage)
+    
     return columns, data, None, chart

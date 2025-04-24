@@ -32,7 +32,7 @@ def execute(filters=None):
 	
 	for perf_det in top_perf:
 		perf_det['conversion'] = perf_det["admission"] / perf_det["sfr"] if perf_det["sfr"] !=0 else 0
-	
+		
 	target_crusher_detail = max(top_perf, key=lambda x: x["tot_sal_val"])
 	coversion_pro_detail = max(top_perf, key=lambda x: x["conversion"])
 	admission_star = max(top_perf, key=lambda x: x["admission"])
@@ -44,6 +44,6 @@ def execute(filters=None):
 	
 	tcp = (target_crusher_detail['tot_sal_val'] / target_crusher_detail["target"] ) * 100
 	chart['data']['datasets'][0]['values'].append(tcp)
-	chart['data']['datasets'][0]['values'].append(coversion_pro_detail['conversion'])
+	chart['data']['datasets'][0]['values'].append((coversion_pro_detail['conversion'] * 100) )
 	chart['data']['datasets'][0]['values'].append(admission_star['admission']) 
 	return columns, data, None, chart

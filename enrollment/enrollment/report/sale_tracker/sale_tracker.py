@@ -49,12 +49,12 @@ def execute(filters=None):
 				"width": 120
 			})
             current_date = add_days(current_date, 1)
-
+    
     main_query = (
 		frappe.qb
 		.from_(sa)
 		.join(sp).on(sa.sales_person == sp.sales_person_name)
-		.join(spt).on(spt.sales_person == sa.sales_person)
+		.left_join(spt).on(spt.sales_person == sa.sales_person)
 		.select(
 			sa.sales_person.as_("acad_coun"),
 			Sum(sa.total_sale_value).as_("total_sale_value"),
@@ -69,7 +69,8 @@ def execute(filters=None):
 		.where((sa.date_of_sale >= filters.start_date) & (sa.date_of_sale <= filters.end_date))
 		.groupby(sa.sales_person)
     )
-   
+    
+    
     if filters.sales_person:
         main_query = main_query.where(sa.sales_person == filters.sales_person)
     if filters.product:
@@ -82,15 +83,15 @@ def execute(filters=None):
         sales_collection = row.get("sales_collection") or 0
         total_sale_value = row.get("total_sale_value") or 0
         adms = row.get("adms") or 0
-        sfr = row.get("sfr") or 1
+        sfr = row.get("sfr") or 0
         target_sfr = row.get("target_sfr") or 1
 
         row["target_perc"] = (round(sales_collection / target * 100, 2)) if target else 0
         row["progress"] = (round(total_sale_value / target * 100, 2)) if target else 0
         row["sfr_perc"] = (round((sfr / target_sfr) * 100, 2)) if target_sfr else 0
-        row["acr"] = (round(adms / sfr, 2)) if sfr else 0
+        row["acr"] = (round(adms / sfr, 3)) if sfr else 0
         row["arpu"] = (round(sales_collection / adms, 2)) if adms else 0
-
+        
         result = frappe.db.get_all(
 			"Sales Activity",
 			filters={
@@ -150,7 +151,56 @@ def execute(filters=None):
     
     for data_row in chart_data:
         chart['data']['labels'].append(data_row['sales_person'])
-        percentage = (data_row['total_sale_value'] / data_row['target'])*100
+        percentage = (data_row['total_sale_value'] / data_row.get('target'))*100 if data_row.get('target') else 0
         chart['data']['datasets'][0]['values'].append(percentage)
     
+    chart_2 = {
+        "data": {
+            "labels": ["A", "B", "C"],
+            "datasets": [{"name": "Products", "values": [5, 15, 25]}]
+        },
+        "type": "line",
+        "title": "Product Trends"
+    }
     return columns, data, None, chart
+
+
+@frappe.whitelist()
+def get_second_chart(filters=None):
+    data = []
+	
+    sa = DocType("Sales Activity")
+    spt= DocType("Sales Person Target")
+    chart = {
+        "data": {
+            "labels": [],
+            "datasets": [{"name": "top performers", "values": []}]
+        },
+        "type": "bar"
+    }
+    
+    top_perf = (
+		frappe.qb.from_(sa)
+		.left_join(spt).on(sa.sales_person == spt.sales_person)
+		.select(spt.target, sa.sales_person, Sum(sa.total_sale_value).as_("tot_sal_val"), Count(sa.name).as_("admission"), Sum(sa.connected_calls).as_("sfr"))
+		.groupby(sa.sales_person)
+		.run(as_dict=1)
+	)
+	
+    for perf_det in top_perf:
+        perf_det['conversion'] = perf_det["admission"] / perf_det["sfr"] if perf_det["sfr"] !=0 else 0
+		
+    target_crusher_detail = max(top_perf, key=lambda x: x["tot_sal_val"])
+    coversion_pro_detail = max(top_perf, key=lambda x: x["conversion"])
+    admission_star = max(top_perf, key=lambda x: x["admission"])
+	
+    data.append({"tc": target_crusher_detail['sales_person'] + "(Target Crusher)", "con_pro": coversion_pro_detail['sales_person'] + "(Coversion Pro)", "adm_star": admission_star['sales_person']+ "(Admission Star)"})
+    chart['data']['labels'].append(data[0]['tc'])
+    chart['data']['labels'].append(data[0]['con_pro'])
+    chart['data']['labels'].append(data[0]['adm_star'])
+	
+    tcp = (target_crusher_detail['tot_sal_val'] / target_crusher_detail["target"] ) * 100
+    chart['data']['datasets'][0]['values'].append(tcp)
+    chart['data']['datasets'][0]['values'].append((coversion_pro_detail['conversion'] * 100) )
+    chart['data']['datasets'][0]['values'].append(admission_star['admission']) 
+    return chart

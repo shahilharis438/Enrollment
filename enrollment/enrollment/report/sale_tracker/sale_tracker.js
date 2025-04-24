@@ -7,14 +7,14 @@ frappe.query_reports["Sale Tracker"] = {
 			fieldname: "start_date",
 			label: "Start Date",
 			fieldtype: "Date",
-			default: frappe.datetime.month_start(),  // optional: set default to month start
+			default: frappe.datetime.month_start(),
 			reqd: 1
 		},
 		{
 			fieldname: "end_date",
 			label: "End Date",
 			fieldtype: "Date",
-			default: frappe.datetime.month_end(),    // optional: set default to month end
+			default: frappe.datetime.month_end(),
 			reqd: 1
 		},
 		{
@@ -32,8 +32,26 @@ frappe.query_reports["Sale Tracker"] = {
 	],
 
 	onload: function (report) {
+		// Add button to redirect to another report
 		report.page.add_inner_button("View Top Performers", function () {
 			frappe.set_route("query-report", "Top Performers");
+		});
+
+		
+		const wrapper = report.page.main;
+		$(wrapper).append('<div id="extra-chart" style="margin-top: 40px;"></div>');
+
+		
+		frappe.call({
+			method: "enrollment.enrollment.report.sale_tracker.sale_tracker.get_second_chart",  
+			args: {
+				filters: report.get_filter_values()
+			},
+			callback: function (r) {
+				if (r.message) {
+					new frappe.Chart("#extra-chart", r.message);
+				}
+			}
 		});
 	}
 };

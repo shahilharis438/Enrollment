@@ -29,5 +29,11 @@ frappe.query_reports["Sale Tracker"] = {
 			fieldtype: "Link",
 			options: "Product",
 		},
-	]
+	],
+
+	onload: function (report) {
+		report.page.add_inner_button("View Top Performers", function () {
+			frappe.set_route("query-report", "Top Performers");
+		});
+	}
 };

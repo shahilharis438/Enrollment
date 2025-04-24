@@ -33,11 +33,7 @@ frappe.query_reports["Sale Tracker"] = {
 
 	onload: function (report) {
 		// Add button to redirect to another report
-		report.page.add_inner_button("View Top Performers", function () {
-			frappe.set_route("query-report", "Top Performers");
-		});
 
-		
 		const wrapper = report.page.main;
 		$(wrapper).append('<div id="extra-chart" style="margin-top: 40px;"></div>');
 

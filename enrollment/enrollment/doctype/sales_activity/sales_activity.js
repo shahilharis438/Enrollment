@@ -42,6 +42,12 @@ frappe.ui.form.on("Sales Activity", {
                     }
                 });
         }
+    },
+
+    types_of_report: function (frm) {
+        let selected = frm.doc.types_of_report;
+        frm.set_df_property('types_of_report', 'options', selected);
+        frm.refresh_field('types_of_report');
     }
 
 });

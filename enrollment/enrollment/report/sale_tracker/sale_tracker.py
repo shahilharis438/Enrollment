@@ -4,6 +4,7 @@ import frappe
 from frappe.utils import getdate, add_days
 from frappe.query_builder import DocType
 from frappe.query_builder.functions import Sum, Count
+from datetime import datetime
 
 def execute(filters=None):
     data = []
@@ -26,17 +27,23 @@ def execute(filters=None):
 		{"label": "Installment Collection", "fieldname": "installment_collection", "fieldtype": "Currency", "width": 200},
 		{"label": "Revenue", "fieldname": "revenue", "fieldtype": "Currency", "width": 200},
 	]
+    months_num = {
+    1: "january",2: "february",3: "march",4: "april",
+    5: "may",6: "june",7: "july",8: "august",
+    9: "september",10: "october",11: "november",12: "december"
+    }
 
     sa = DocType("Sales Activity")
     sp = DocType("Sales Person")
     spt = DocType("Sales Person Target")
-
+    mt = DocType("Monthly Target")
     date_field = {}
-
+   
     if filters and filters.get("start_date") and filters.get("end_date"):
         start_date = getdate(filters.get("start_date"))
         end_date = getdate(filters.get("end_date"))
-
+        month = datetime.strptime(filters.get("start_date"), "%Y-%m-%d").month
+       
         current_date = start_date
         while current_date <= end_date:
             label = current_date.strftime("%B %-d")
@@ -59,11 +66,11 @@ def execute(filters=None):
 			sa.sales_person.as_("acad_coun"),
 			Sum(sa.total_sale_value).as_("total_sale_value"),
 			Sum(sa.amount_paid).as_("sales_collection"),
-			spt.target.as_("target"),
+			#spt.target.as_("target"),
 			sa.outstanding_amount.as_("outstanding"),
 			Sum(sa.connected_calls).as_("sfr"),
 			Count(sa.name).as_("adms"),
-			spt.custom_target_sfr.as_("target_sfr"),
+			#spt.custom_target_sfr.as_("target_sfr"),
 			sa.course_purchased.as_("product")
 		)
 		.where((sa.date_of_sale >= filters.start_date) & (sa.date_of_sale <= filters.end_date))
@@ -79,13 +86,25 @@ def execute(filters=None):
     main_query = main_query.run(as_dict=1)
     
     for row in main_query:
-        target = row.get("target") or 0
+        
         sales_collection = row.get("sales_collection") or 0
         total_sale_value = row.get("total_sale_value") or 0
         adms = row.get("adms") or 0
         sfr = row.get("sfr") or 0
-        target_sfr = row.get("target_sfr") or 1
-
+      
+        targets = (
+            frappe.qb.from_(spt)
+            .left_join(mt).on(mt.parent == spt.name)
+            .select(spt.name, mt.target, mt.target_sfr)
+            .where(( mt.month == months_num[month] ) &( spt.sales_person == row.get("acad_coun")))
+            .run(as_dict=1)
+        )
+       
+        target = targets[0].get('target') if targets else 0
+        target_sfr = int(targets[0].get('target_sfr')) if targets else 0
+        
+        row['target'] = target
+        row['target_sfr'] = target_sfr
         row["target_perc"] = (round(sales_collection / target * 100, 2)) if target else 0
         row["progress"] = (round(total_sale_value / target * 100, 2)) if target else 0
         row["sfr_perc"] = (round((sfr / target_sfr) * 100, 2)) if target_sfr else 0
@@ -154,14 +173,7 @@ def execute(filters=None):
         percentage = (data_row['total_sale_value'] / data_row.get('target'))*100 if data_row.get('target') else 0
         chart['data']['datasets'][0]['values'].append(percentage)
     
-    chart_2 = {
-        "data": {
-            "labels": ["A", "B", "C"],
-            "datasets": [{"name": "Products", "values": [5, 15, 25]}]
-        },
-        "type": "line",
-        "title": "Product Trends"
-    }
+   
     return columns, data, None, chart
 
 
@@ -176,7 +188,9 @@ def get_second_chart(filters=None):
             "labels": [],
             "datasets": [{"name": "top performers", "values": []}]
         },
-        "type": "bar"
+        "type": "bar",
+        "title": "Top Performers",
+        "colors": ["#34D399"] 
     }
     
     top_perf = (

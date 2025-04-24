@@ -1,0 +1,44 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-04-24 14:46:58.066995",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "month",
+  "target",
+  "target_sfr"
+ ],
+ "fields": [
+  {
+   "fieldname": "month",
+   "fieldtype": "Select",
+   "label": "Month",
+   "options": "January\nFebruary\nMarch\nApril\nMay\nJune\nJuly\nAugust\nSeptember\nOctober\nNovember\nDecember"
+  },
+  {
+   "fieldname": "target",
+   "fieldtype": "Currency",
+   "label": "Target"
+  },
+  {
+   "fieldname": "target_sfr",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Target Sfr"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-04-24 15:14:16.089073",
+ "modified_by": "Administrator",
+ "module": "enrollment",
+ "name": "Monthly Target",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

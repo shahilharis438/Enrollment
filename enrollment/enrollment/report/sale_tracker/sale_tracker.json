@@ -9,7 +9,7 @@
  "idx": 0,
  "is_standard": "Yes",
  "letterhead": null,
- "modified": "2025-04-24 09:24:21.242075",
+ "modified": "2025-04-25 09:26:42.719375",
  "modified_by": "Administrator",
  "module": "enrollment",
  "name": "Sale Tracker",
@@ -18,5 +18,9 @@
  "ref_doctype": "Sales Activity",
  "report_name": "Sale Tracker",
  "report_type": "Script Report",
- "roles": []
+ "roles": [
+  {
+   "role": "All"
+  }
+ ]
 }

@@ -7,28 +7,30 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
 
 	// Filters HTML
 	var filters_html = `
-		<div class="filters">
-			<label>Start Date</label>
-			<input type="date" id="start_date">
-			
-			<label>End Date</label>
-			<input type="date" id="end_date">
-			
-			<label>Academic Counselor</label>
-			<select id="acad_coun_filter">
-				<option value="">Select Counselor</option>
-			</select>
-			
-			<label>Product</label>
-			<select id="product_filter">
-				<option value="">Select Product</option>
-			</select>
-			
-			<button id="apply_filters">Apply Filters</button>
-		</div>
-		<div id="sales_chart" style="display:none;"></div> <!-- Initially hide the chart -->
-		<div id="report-table"></div>
-	`;
+        <div class="filters">
+            <label>Start Date</label>
+            <input type="date" id="start_date">
+
+            <label>End Date</label>
+            <input type="date" id="end_date">
+
+            <label>Academic Counselor</label>
+            <select id="acad_coun_filter">
+                <option value="">Select Counselor</option>
+            </select>
+
+            <label>Product</label>
+            <select id="product_filter">
+                <option value="">Select Product</option>
+            </select>
+
+            <button id="apply_filters">Apply Filters</button>
+        </div>
+        <div id="sales_chart" style="display:none;"></div>
+        <div id="sales_chart_2" style="display:none;"></div>
+        <div id="sales-tracker-table"></div> <!-- Sales Tracker Table -->
+        <div id="sfr-tracker-table"></div> <!-- SFR Tracker Table -->
+    `;
 
 	$(wrapper).html(filters_html);
 
@@ -68,110 +70,103 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
 		let acad_coun = $('#acad_coun_filter').val();
 		let product = $('#product_filter').val();
 
-		// Show the chart container
-		$("#sales_chart").show();
+		if (!start_date || !end_date) {
+			frappe.msgprint(__('Please select both start and end dates.'));
+			return;
+		}
 
-		// Get Chart Data
+		$("#sales_chart").show();
+		$("#sales_chart_2").show();
+
+		// First Chart: Sales Champions
 		frappe.call({
 			method: "enrollment.enrollment.page.sales_tracker.report_data.get_sales_champions",
-			args: {
-				start_date: start_date,
-				end_date: end_date,
-				sales_person: acad_coun,
-				product: product
-			},
+			args: { start_date, end_date },
 			callback: function (r) {
-				
-				console.log("Chart data response:", r.message);
+				if (r.message) {
+					let labels_1 = r.message[0];
+					let values_1 = r.message[1];
 
-				if (r.message ) {
-					let labels = r.message[0];
-					let values = r.message[1];
+					new frappe.Chart("#sales_chart", {
+						title: "Sales Champions",
+						data: {
+							labels: labels_1,
+							datasets: [{ name: "Target Progress", values: values_1 }]
+						},
+						type: 'pie',
+						height: 300,
+						colors: ['#5e64ff']
+					});
 
-					// r.message.forEach(item => {
-					// 	labels.push(item.name || "Unknown");
-					// 	values.push(item.sfr_percent || 0);
-					// });
+					let labels_2 = r.message[2];
+					let values_2 = r.message[3];
 
-					
-					// if ($("#sales_chart").length > 0) {
-						// Create the chart
-						new frappe.Chart("#sales_chart", {
-							title: "SFR % by Academic Counselor",
-							data: {
-								labels: labels,
-								datasets: [
-									{
-										name: "SFR %",
-										values: values
-									}
-								]
-							},
-							type: 'bar',
-							height: 300,
-							colors: ['#5e64ff']
-						});
-					// }
-				} 
-				// else {
-				// 	$("#sales_chart").html("<p>No data available for the selected filters.</p>");
-				// }
+					new frappe.Chart("#sales_chart_2", {
+						title: "Top Performers",
+						data: {
+							labels: labels_2,
+							datasets: [{ name: "Top Performers", values: values_2 }]
+						},
+						type: 'bar',
+						height: 300,
+						colors: ['#ff6363'],
+					});
+				}
 			}
 		});
 
-		// Get Report Data
+		// Sales Tracker Report
 		frappe.call({
 			method: "enrollment.enrollment.page.sales_tracker.report_data.execute",
-			args: {
-				start_date: start_date,
-				end_date: end_date,
-				sales_person: acad_coun,
-				product: product
-			},
+			args: { start_date, end_date, sales_person: acad_coun, product: product },
 			callback: function (r) {
 				if (r.message) {
-					let html = `<table class="table table-bordered">
-						<tr>
-							<th>Academic Counselor</th>
-							<th>Progress</th>
-							<th>SFR</th>
-							<th>SFR %</th>
-							<th>Target Sfr</th>
-							<th>Adms</th>
-							<th>Sale Value</th>
-							<th>Sale Collection</th>
-							<th>Target</th>
-							<th>Target %</th>
-							<th>Outstanding</th>
-							<th>Arpu</th>
-							<th>Acr</th>
-							<th>Installment</th>
-							<th>Installment Collection</th>`;
+					let html = `
+                        <center><h4>Sales Tracker</h4></center>
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Academic Counselor</th>
+                                    <th>Progress</th>
+                                    <th>SFR</th>
+                                    <th>SFR %</th>
+                                    <th>Target Sfr</th>
+                                    <th>Adms</th>
+                                    <th>Sale Value</th>
+                                    <th>Sale Collection</th>
+                                    <th>Target</th>
+                                    <th>Target %</th>
+                                    <th>Outstanding</th>
+                                    <th>ARPU</th>
+                                    <th>ACR</th>
+                                    <th>Installment</th>
+                                    <th>Installment Collection</th>`;
 
-					for (let i = 0; i < r.message[1].length; i++) {
-						let day = r.message[1][i];
+					r.message[1].forEach(day => {
 						html += `<th>${day}</th>`;
-					}
+					});
 
-					html += `</tr>`;
+					html += `</tr>
+                            </thead>
+                            <tbody>`;
 
 					r.message[0].forEach(row => {
 						html += `<tr>
-							<td>${row.acad_coun}</td>
-							<td>${row.progress}</td>
-							<td>${row.sfr}</td>
-							<td>${row.sfr_perc}</td>
-							<td>${row.target_sfr}</td>
-							<td>${row.adms}</td>
-							<td>${row.total_sale_value}</td>
-							<td>${row.sales_collection}</td>
-							<td>${row.target}</td>
-							<td>${row.target_perc}</td>
-							<td>${row.outstanding}</td>
-							<td>${row.arpu}</td>
-							<td>${row.acr}</td>
-							<td>${row.installment}</td>
-							<td>${row.installment_collection}</td>`;
+                            <td>${row.acad_coun}</td>
+                            <td>${row.progress}</td>
+                            <td>${row.sfr}</td>
+                            <td>${row.sfr_perc}</td>
+                            <td>${row.target_sfr}</td>
+                            <td>${row.adms}</td>
+                            <td>${row.total_sale_value}</td>
+                            <td>${row.sales_collection}</td>
+                            <td>${row.target}</td>
+                            <td>${row.target_perc}</td>
+                            <td>${row.outstanding}</td>
+                            <td>${row.arpu }</td>
+                            <td>${row.acr }</td>
+                            <td>${row.installment}</td>
+                            <td>${row.installment_collection}</td>`;
 
 						r.message[1].forEach(day => {
 							html += `<td>${row[day]}</td>`;
@@ -180,11 +175,59 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
 						html += `</tr>`;
 					});
 
-					html += `</table>`;
+					html += `</tbody></table>`;
 
-					$(wrapper).find("#report-table").html(html);
+					$(wrapper).find("#sales-tracker-table").html(html);
 				}
 			}
 		});
+
+		// SFR Tracker Report
+		frappe.call({
+			method: "enrollment.enrollment.page.sales_tracker.report_data.sfr_tracker",
+			args: { start_date, end_date, sales_person: acad_coun, product: product },
+			callback: function (r) {
+				if (r.message) {
+					let html = `
+                        <center><h4>SFR Tracker</h4></center>
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Academic Counselor</th>
+                                    <th>Progress</th>
+                                    <th>SFR %</th>
+                                    <th>Target Sfr</th>
+                                    <th>Actual Sfr</th>`;
+
+					r.message[1].forEach(day => {
+						html += `<th>${day}</th>`;
+					});
+
+					html += `</tr>
+                            </thead>
+                            <tbody>`;
+
+					r.message[0].forEach(row => {
+						html += `<tr>
+                            <td>${row.sales_person}</td>
+                            <td>${row.progress}</td>
+                            <td>${row.sfr_perc}</td>
+                            <td>${row.target_sfr}</td>
+                            <td>${row.sfr}</td>`;
+
+						r.message[1].forEach(day => {
+							html += `<td>${row[day]}</td>`;
+						});
+
+						html += `</tr>`;
+					});
+
+					html += `</tbody></table>`;
+
+					$(wrapper).find("#sfr-tracker-table").html(html);
+				}
+			}
+		});
+
 	});
 };

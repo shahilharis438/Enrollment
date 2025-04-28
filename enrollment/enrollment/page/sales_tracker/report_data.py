@@ -6,10 +6,19 @@ from frappe.query_builder import DocType
 from frappe.query_builder.functions import Sum, Count
 from datetime import datetime
 
+months_num = {
+    1: "january",2: "february",3: "march",4: "april",
+    5: "may",6: "june",7: "july",8: "august",
+    9: "september",10: "october",11: "november",12: "december"
+    }
+sa = DocType("Sales Activity")
+sp = DocType("Sales Person")
+spt = DocType("Sales Person Target")
+mt = DocType("Monthly Target")
+
 @frappe.whitelist()
 def execute(start_date, end_date, sales_person, product):
 	data = []
-	total_values = []
 	days = []
 	columns = [
 		{"label": "Academic Counselor", "fieldname": "acad_coun", "fieldtype": "Link", "options": "Sales Person", "width": 200},
@@ -30,35 +39,15 @@ def execute(start_date, end_date, sales_person, product):
 		{"label": "Installment Collection", "fieldname": "installment_collection", "fieldtype": "Currency", "width": 200},
 		{"label": "Revenue", "fieldname": "revenue", "fieldtype": "Currency", "width": 200},
 	]
-	months_num = {
-    1: "january",2: "february",3: "march",4: "april",
-    5: "may",6: "june",7: "july",8: "august",
-    9: "september",10: "october",11: "november",12: "december"
-    }
+	
 
-	sa = DocType("Sales Activity")
-	sp = DocType("Sales Person")
-	spt = DocType("Sales Person Target")
-	mt = DocType("Monthly Target")
+	
 	date_field = {}
 	col_data = {}
 	if  start_date and end_date:
-		start_date = getdate(start_date)
-		end_date = getdate(end_date)
+		date_field = set_dates(start_date, end_date, columns)
 		month = datetime.strptime(str(start_date), "%Y-%m-%d").month
-		current_date = start_date
-		while current_date <= end_date:
-			label = current_date.strftime("%B %-d")
-			fieldname = f"day_{current_date.strftime('%Y_%m_%d')}"
-			date_field[current_date] = fieldname
-			columns.append({
-				"label": label,
-				"fieldname": fieldname,
-				"fieldtype": "Currency",
-				"width": 120
-			})
-			current_date = add_days(current_date, 1)
-
+		
 		main_query = (
 		    frappe.qb
 		    .from_(sa)
@@ -142,9 +131,9 @@ def execute(start_date, end_date, sales_person, product):
 				data.append(row)
 	
 		for row in main_query:
-			current_date_row = start_date 
+			current_date_row = getdate(start_date)
 			col_data = {} 
-			while current_date_row <= end_date:
+			while current_date_row <= getdate(end_date):
 				label = current_date_row.strftime("%B %-d")
 				col_data[label] = row.get(date_field.get(current_date_row)) or 0
 				current_date_row = add_days(current_date_row, 1)
@@ -153,27 +142,129 @@ def execute(start_date, end_date, sales_person, product):
 		for col in columns[17:]:
 			days.append(col['label'])
 	
-
+	
 	return data, days
 
 
 @frappe.whitelist()
-def get_sales_champions():
-	sa = DocType("Sales Activity")
-	spt = DocType("Sales Person Target")
-	labels, data = [], []
+def get_sales_champions(start_date, end_date):
+	
+	month = datetime.strptime(str(start_date), "%Y-%m-%d").month
+	labels_1, data_1, labels_2, data_2 = [], [], [], []
 	chart_data = (
         frappe.qb.from_(sa)
         .left_join(spt).on(sa.sales_person == spt.sales_person)
-        .select(spt.target, sa.sales_person, Sum(sa.total_sale_value).as_("total_sale_value"))
+		.left_join(mt).on(mt.parent == spt.name)
+        .select(mt.target, sa.sales_person, Sum(sa.total_sale_value).as_("total_sale_value"),  
+				Count(sa.name).as_("admission"), Sum(sa.connected_calls).as_("sfr"))
+		.where((sa.date_of_sale >= start_date) & (sa.date_of_sale <=end_date) )
+		.where(months_num[month] == mt.month)
         .groupby(sa.sales_person)
 		.orderby("total_sale_value", desc=True)
-        .run(as_dict=1)
+		.run(as_dict=1)
+        
     )
-
+	
+	
 	for row in chart_data:
-		labels.append(row.sales_person)
+		labels_1.append(row.sales_person)
 		perc = (row.total_sale_value / row.target) * 100
-		data.append(perc)
+		data_1.append(perc)
+		row['perc'] = perc
+		row['conversion'] = (row["admission"] / row["sfr"])*100 if row["sfr"] !=0 else 0
+	
+	target_crusher_detail = max(chart_data, key=lambda x: x["total_sale_value"])
+	coversion_pro_detail = max(chart_data, key=lambda x: x["conversion"])
+	admission_star = max(chart_data, key=lambda x: x["admission"])
+	
+	labels_2.append(target_crusher_detail["sales_person"]+ " "+ "Target Crusher")
+	labels_2.append(coversion_pro_detail["sales_person"]+ " "+ "Conversion Pro")
+	labels_2.append(admission_star["sales_person"]+ " "+ "Admission Star")
+	
+	data_2.append(target_crusher_detail['perc'])
+	data_2.append(coversion_pro_detail['conversion'])
+	data_2.append(admission_star['admission'])
+	
+	return labels_1, data_1, labels_2, data_2
 
-	return labels, data
+
+@frappe.whitelist()
+def sfr_tracker(start_date, end_date, sales_person, product):
+	columns = [{}]
+	date_field = {}
+	days = []
+	data = []
+	month = datetime.strptime(str(start_date), "%Y-%m-%d").month
+	sfr_data = (
+		frappe.qb.from_(sa)
+		.left_join(spt).on(sa.sales_person == spt.sales_person)
+		.left_join(mt).on(mt.parent == spt.name)
+		.select(sa.sales_person, Sum(sa.total_sale_value).as_("sale_value"), mt.target, mt.target_sfr,  Sum(sa.connected_calls).as_("sfr"))
+		.groupby(sa.sales_person)
+		.where((sa.date_of_sale>= start_date) & (sa.date_of_sale<= end_date))
+		.where(months_num[month] == mt.month)
+		.orderby(sa.connected_calls, desc=True)
+		
+	)
+
+	if  start_date and end_date:
+		date_field = set_dates(start_date, end_date, columns)
+		if sales_person:
+			sfr_data =sfr_data.where(sa.sales_person == sales_person)
+		sfr_data = sfr_data.run(as_dict=1)
+		for row in sfr_data:
+			row['progress'] = round((row['sale_value'] / row['target'] * 100), 2)
+			row['sfr_perc'] = round((row['sfr'] / int(row['target_sfr'])) * 100, 2)
+
+			daywise_query = (
+			    	frappe.qb
+			    	.from_(sa)
+			    	.select(sa.date_of_sale, Sum(sa.connected_calls).as_("connected_calls"))
+			    	.where(
+					(sa.date_of_sale >= start_date) &
+					(sa.date_of_sale <= end_date) &
+					(sa.sales_person == row["sales_person"])
+			    	)
+			    	.groupby(sa.date_of_sale)
+			    	.run(as_dict=1)
+		    	)
+			for day_row in daywise_query:
+					date_key = day_row.get("date_of_sale")
+					if date_key and date_key in date_field:
+						row[date_field[date_key]] = day_row.get("connected_calls") or 0
+			data.append(row)
+		
+		for row in sfr_data:
+			current_date_row = getdate(start_date)
+			col_data = {} 
+			while current_date_row <= getdate(end_date):
+				label = current_date_row.strftime("%B %-d")
+				col_data[label] = row.get(date_field.get(current_date_row)) or 0
+				current_date_row = add_days(current_date_row, 1)
+			row.update(col_data)
+		
+		for col in columns:
+			if col:
+				days.append(col['label'])
+
+	return data, days
+
+def set_dates(start_date, end_date, columns):
+	start_date = getdate(start_date)
+	end_date = getdate(end_date)
+	date_field = {}	
+	current_date = start_date
+	
+	
+	while current_date <= end_date:
+		label = current_date.strftime("%B %-d")
+		fieldname = f"day_{current_date.strftime('%Y_%m_%d')}"
+		date_field[current_date] = fieldname
+		columns.append({
+			"label": label,
+			"fieldname": fieldname,
+			"fieldtype": "Currency",
+			"width": 120
+		})
+		current_date = add_days(current_date, 1)
+	return date_field

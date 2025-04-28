@@ -89,69 +89,91 @@ def execute(start_date, end_date, sales_person, product):
 
 		main_query = main_query.run(as_dict=1)
    
-		
-		for row in main_query:
+		if main_query:
+			for row in main_query:
 			
-			sales_collection = row.get("sales_collection") or 0
-			total_sale_value = row.get("total_sale_value") or 0
-			adms = row.get("adms") or 0
-			sfr = row.get("sfr") or 0
-			target = row.get("target") if row.get("target") else 0
-			target_sfr =  int(row.get("target_sfr")) if row.get("target_sfr") else 0
+				sales_collection = row.get("sales_collection") or 0
+				total_sale_value = row.get("total_sale_value") or 0
+				adms = row.get("adms") or 0
+				sfr = row.get("sfr") or 0
+				target = row.get("target") if row.get("target") else 0
+				target_sfr =  int(row.get("target_sfr")) if row.get("target_sfr") else 0
         
        
-			row["target_perc"] = (round(sales_collection / target * 100, 2)) if target else 0
-			row["progress"] = (round(total_sale_value / target * 100, 2)) if target else 0
-			row["sfr_perc"] = (round((sfr / target_sfr) * 100, 2)) if target_sfr else 0
-			row["acr"] = (round(adms / sfr, 3)) if sfr else 0
-			row["arpu"] = (round(sales_collection / adms, 2)) if adms else 0
+				row["target_perc"] = (round(sales_collection / target * 100, 2)) if target else 0
+				row["progress"] = (round(total_sale_value / target * 100, 2)) if target else 0
+				row["sfr_perc"] = (round((sfr / target_sfr) * 100, 2)) if target_sfr else 0
+				row["acr"] = (round(adms / sfr, 3)) if sfr else 0
+				row["arpu"] = (round(sales_collection / adms, 2)) if adms else 0
         
-			result = frappe.db.get_all(
-			    "Sales Activity",
-			    filters={
-				"sales_person": row["acad_coun"],
-				"types_of_report": "Installment"
-			    },
-			    fields=[
-				    "COUNT(name) as installment",
-				    "SUM(amount_paid) as installment_collection"
-			    ]
-		    )
+				result = frappe.db.get_all(
+			    	"Sales Activity",
+			    	filters={
+						"sales_person": row["acad_coun"],
+						"types_of_report": "Installment"
+			    	},
+			    	fields=[
+				    	"COUNT(name) as installment",
+				    	"SUM(amount_paid) as installment_collection"
+			    	]
+		   	 	)
 
-			row["installment"] = result[0].installment or 0
-			row["installment_collection"] = result[0].installment_collection or 0
+				row["installment"] = result[0].installment or 0
+				row["installment_collection"] = result[0].installment_collection or 0
 
-			daywise_query = (
-			    frappe.qb
-			    .from_(sa)
-			    .select(sa.date_of_sale, Sum(sa.amount_paid).as_("amount_paid"))
-			    .where(
-				(sa.date_of_sale >= start_date) &
-				(sa.date_of_sale <= end_date) &
-				(sa.sales_person == row["acad_coun"])
-			    )
-			    .groupby(sa.date_of_sale)
-			    .run(as_dict=1)
-		    )
+				daywise_query = (
+			    	frappe.qb
+			    	.from_(sa)
+			    	.select(sa.date_of_sale, Sum(sa.amount_paid).as_("amount_paid"))
+			    	.where(
+					(sa.date_of_sale >= start_date) &
+					(sa.date_of_sale <= end_date) &
+					(sa.sales_person == row["acad_coun"])
+			    	)
+			    	.groupby(sa.date_of_sale)
+			    	.run(as_dict=1)
+		    	)
 			
-			for day_row in daywise_query:
-				date_key = day_row.get("date_of_sale")
-				if date_key and date_key in date_field:
-					row[date_field[date_key]] = day_row.get("amount_paid") or 0
+				for day_row in daywise_query:
+					date_key = day_row.get("date_of_sale")
+					if date_key and date_key in date_field:
+						row[date_field[date_key]] = day_row.get("amount_paid") or 0
 			
-			data.append(row)
+				data.append(row)
 	
-	for row in main_query:
-		current_date_row = start_date 
-		col_data = {} 
-		while current_date_row <= end_date:
-			label = current_date_row.strftime("%B %-d")
-			col_data[label] = row.get(date_field.get(current_date_row)) or 0
-			current_date_row = add_days(current_date_row, 1)
-		row.update(col_data)
-			
-	for col in columns[17:]:
-		days.append(col['label'])
+		for row in main_query:
+			current_date_row = start_date 
+			col_data = {} 
+			while current_date_row <= end_date:
+				label = current_date_row.strftime("%B %-d")
+				col_data[label] = row.get(date_field.get(current_date_row)) or 0
+				current_date_row = add_days(current_date_row, 1)
+			row.update(col_data)
 	
+		for col in columns[17:]:
+			days.append(col['label'])
 	
+
 	return data, days
+
+
+@frappe.whitelist()
+def get_sales_champions():
+	sa = DocType("Sales Activity")
+	spt = DocType("Sales Person Target")
+	labels, data = [], []
+	chart_data = (
+        frappe.qb.from_(sa)
+        .left_join(spt).on(sa.sales_person == spt.sales_person)
+        .select(spt.target, sa.sales_person, Sum(sa.total_sale_value).as_("total_sale_value"))
+        .groupby(sa.sales_person)
+		.orderby("total_sale_value", desc=True)
+        .run(as_dict=1)
+    )
+
+	for row in chart_data:
+		labels.append(row.sales_person)
+		perc = (row.total_sale_value / row.target) * 100
+		data.append(perc)
+
+	return labels, data

@@ -84,7 +84,7 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
                     <th>Academic Counselor</th>
                     <th>Progress</th>
 					<th>SFR</th>
-					<th">SFR %</th>
+					<th>SFR %</th>
 					<th>Target Sfr</th>
 					<th>Adms</th>
 					<th>Sale Value</th>

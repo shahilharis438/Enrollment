@@ -195,6 +195,7 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
                                 <tr>
                                     <th>Academic Counselor</th>
                                     <th>Progress</th>
+									<th>SFR Rank</th>
                                     <th>SFR %</th>
                                     <th>Target Sfr</th>
                                     <th>Actual Sfr</th>`;
@@ -211,10 +212,11 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
 						html += `<tr>
                             <td>${row.sales_person}</td>
                             <td>${row.progress}</td>
+							<td>${row.rank} </td>
                             <td>${row.sfr_perc}</td>
                             <td>${row.target_sfr}</td>
                             <td>${row.sfr}</td>`;
-
+						
 						r.message[1].forEach(day => {
 							html += `<td>${row[day]}</td>`;
 						});

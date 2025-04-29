@@ -6,6 +6,7 @@ from frappe.query_builder import DocType
 from frappe.query_builder.functions import Sum, Count
 from datetime import datetime
 
+
 months_num = {
     1: "january",2: "february",3: "march",4: "april",
     5: "may",6: "june",7: "july",8: "august",
@@ -203,19 +204,20 @@ def sfr_tracker(start_date, end_date, sales_person, product):
 		.groupby(sa.sales_person)
 		.where((sa.date_of_sale>= start_date) & (sa.date_of_sale<= end_date))
 		.where(months_num[month] == mt.month)
-		.orderby(sa.connected_calls, desc=True)
+		
 		
 	)
-
+	
 	if  start_date and end_date:
 		date_field = set_dates(start_date, end_date, columns)
 		if sales_person:
 			sfr_data =sfr_data.where(sa.sales_person == sales_person)
 		sfr_data = sfr_data.run(as_dict=1)
-		for row in sfr_data:
+		sfr_sorted_data = sorted(sfr_data, key=lambda x: x['sfr'], reverse=True)
+		for row in sfr_sorted_data:#query sorted sfr in desc order
 			row['progress'] = round((row['sale_value'] / row['target'] * 100), 2)
 			row['sfr_perc'] = round((row['sfr'] / int(row['target_sfr'])) * 100, 2)
-
+			
 			daywise_query = (
 			    	frappe.qb
 			    	.from_(sa)
@@ -242,6 +244,14 @@ def sfr_tracker(start_date, end_date, sales_person, product):
 				col_data[label] = row.get(date_field.get(current_date_row)) or 0
 				current_date_row = add_days(current_date_row, 1)
 			row.update(col_data)
+		
+		rank = 1
+		previous_sfr = None
+		for idx, row in enumerate(sfr_sorted_data):
+			if row['sfr'] != previous_sfr:
+				rank = idx + 1
+				previous_sfr = row['sfr']
+			row['rank'] = rank
 		
 		for col in columns:
 			if col:

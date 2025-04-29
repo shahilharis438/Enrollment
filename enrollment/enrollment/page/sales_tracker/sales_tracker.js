@@ -197,6 +197,7 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
                                     <th>Progress</th>
 									<th>SFR Rank</th>
                                     <th>SFR %</th>
+									<th>Leave</th>
                                     <th>Target Sfr</th>
                                     <th>Actual Sfr</th>`;
 
@@ -214,6 +215,7 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
                             <td>${row.progress}</td>
 							<td>${row.rank} </td>
                             <td>${row.sfr_perc}</td>
+							<td>${row.leave}</td>
                             <td>${row.target_sfr}</td>
                             <td>${row.sfr}</td>`;
 						

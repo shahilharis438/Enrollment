@@ -230,10 +230,20 @@ def sfr_tracker(start_date, end_date, sales_person, product):
 			    	.groupby(sa.date_of_sale)
 			    	.run(as_dict=1)
 		    	)
+			leave_per_person = 0
 			for day_row in daywise_query:
 					date_key = day_row.get("date_of_sale")
 					if date_key and date_key in date_field:
-						row[date_field[date_key]] = day_row.get("connected_calls") or 0
+						employee = frappe.db.get_value("Sales Person", {'name': row["sales_person"]}, "employee")
+
+						status = frappe.db.get_value("Attendance", {'employee': employee, "attendance_date": date_key}, "status")
+						
+						if status == "On Leave" or status == "Absent":
+							leave_per_person += 1
+							row[date_field[date_key]] = "L"
+						else:
+							row[date_field[date_key]] = day_row.get("connected_calls") or 0
+			row.update({'leave': leave_per_person})
 			data.append(row)
 		
 		for row in sfr_data:

@@ -17,6 +17,9 @@ frappe.ui.form.on("Sales Activity", {
                 });
         }
     },
+    refresh(frm){
+        toggle_fields(frm)
+    },
     
     discount_percentage: function (frm) {
         if (frm.doc.total_sale_value && frm.doc.discount_percentage) {
@@ -28,6 +31,10 @@ frappe.ui.form.on("Sales Activity", {
     amount_paid: function (frm) {
         if (frm.doc.discount_amount && frm.doc.amount_paid) {
             frm.set_value("outstanding_amount", frm.doc.discount_amount - frm.doc.amount_paid);
+        }
+        if(frm.doc.amount_paid > frm.doc.discount_amount){
+            frm.set_value("amount_paid", 0);
+            frm.set_value("outstanding_amount", 0);
         }
     },
     program_purchased: function (frm) {
@@ -48,7 +55,15 @@ frappe.ui.form.on("Sales Activity", {
         let selected = frm.doc.types_of_report;
         frm.set_df_property('types_of_report', 'options', selected);
         frm.refresh_field('types_of_report');
+        toggle_fields(frm)
     }
 
 });
+
+function toggle_fields(frm) {
+    const hide = !frm.doc.types_of_report || frm.doc.types_of_report.trim() === "";
+    frm.toggle_display('sales_person', !hide);
+    frm.toggle_display('date_of_sale', !hide);
+    frm.toggle_display('total_sale_value', !hide);
+}
 

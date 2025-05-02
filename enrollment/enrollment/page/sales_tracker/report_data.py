@@ -4,7 +4,8 @@ import frappe
 from frappe.utils import getdate, add_days
 from frappe.query_builder import DocType
 from frappe.query_builder.functions import Sum, Count
-from datetime import datetime
+from datetime import datetime, timedelta
+from pypika import Case, functions as fn
 
 
 months_num = {
@@ -78,7 +79,7 @@ def execute(start_date, end_date, sales_person, product):
 			main_query = main_query.where(sa.course_purchased == product)
 
 		main_query = main_query.run(as_dict=1)
-   
+		
 		if main_query:
 			for row in main_query:
 			
@@ -166,25 +167,25 @@ def get_sales_champions(start_date, end_date):
         
     )
 	
+	if chart_data:
+		for row in chart_data:
+			labels_1.append(row.sales_person)
+			progress = (row.total_sale_value / row.target) * 100
+			data_1.append(round(progress, 2))
+			row['progress'] = progress
+			row['conversion'] = (row["admission"] / row["sfr"])*100 if row["sfr"] !=0 else 0
 	
-	for row in chart_data:
-		labels_1.append(row.sales_person)
-		perc = (row.total_sale_value / row.target) * 100
-		data_1.append(perc)
-		row['perc'] = perc
-		row['conversion'] = (row["admission"] / row["sfr"])*100 if row["sfr"] !=0 else 0
+		target_crusher_detail = max(chart_data, key=lambda x: x["progress"]) 
+		coversion_pro_detail = max(chart_data, key=lambda x: x["conversion"])
+		admission_star = max(chart_data, key=lambda x: x["admission"])
 	
-	target_crusher_detail = max(chart_data, key=lambda x: x["total_sale_value"])
-	coversion_pro_detail = max(chart_data, key=lambda x: x["conversion"])
-	admission_star = max(chart_data, key=lambda x: x["admission"])
+		labels_2.append(target_crusher_detail["sales_person"]+ " "+ "Target Crusher")
+		labels_2.append(coversion_pro_detail["sales_person"]+ " "+ "Conversion Pro")
+		labels_2.append(admission_star["sales_person"]+ " "+ "Admission Star")
 	
-	labels_2.append(target_crusher_detail["sales_person"]+ " "+ "Target Crusher")
-	labels_2.append(coversion_pro_detail["sales_person"]+ " "+ "Conversion Pro")
-	labels_2.append(admission_star["sales_person"]+ " "+ "Admission Star")
-	
-	data_2.append(target_crusher_detail['perc'])
-	data_2.append(coversion_pro_detail['conversion'])
-	data_2.append(admission_star['admission'])
+		data_2.append(round(target_crusher_detail['progress'],2 ))
+		data_2.append(round(coversion_pro_detail['conversion'], 2))
+		data_2.append(round(admission_star['admission'], 2))
 	
 	return labels_1, data_1, labels_2, data_2
 
@@ -227,32 +228,34 @@ def sfr_tracker(start_date, end_date, sales_person, product):
 					(sa.date_of_sale <= end_date) &
 					(sa.sales_person == row["sales_person"])
 			    	)
-			    	.groupby(sa.date_of_sale)
+			    	.groupby((sa.date_of_sale) &(sa.sales_person))
 			    	.run(as_dict=1)
 		    	)
-			leave_per_person = 0
+			
 			for day_row in daywise_query:
 					date_key = day_row.get("date_of_sale")
 					if date_key and date_key in date_field:
-						employee = frappe.db.get_value("Sales Person", {'name': row["sales_person"]}, "employee")
-
-						status = frappe.db.get_value("Attendance", {'employee': employee, "attendance_date": date_key}, "status")
+						row[date_field[date_key]] = day_row.get("connected_calls") or 0
 						
-						if status == "On Leave" or status == "Absent":
-							leave_per_person += 1
-							row[date_field[date_key]] = "L"
-						else:
-							row[date_field[date_key]] = day_row.get("connected_calls") or 0
-			row.update({'leave': leave_per_person})
+			
 			data.append(row)
 		
 		for row in sfr_data:
 			current_date_row = getdate(start_date)
 			col_data = {} 
+			leave_per_person = 0
 			while current_date_row <= getdate(end_date):
 				label = current_date_row.strftime("%B %-d")
 				col_data[label] = row.get(date_field.get(current_date_row)) or 0
+				emp = frappe.db.get_value("Sales Person", {"name": row["sales_person"]}, 'employee')
+				status = frappe.db.get_value("Attendance", {"employee": emp, "attendance_date": current_date_row}, "status")
+				field = (datetime.strptime(str(current_date_row), "%Y-%m-%d") + timedelta(days=1)).strftime("day_%Y_%m_%d")
+									
+				if status == "On Leave" or status == "Absent":
+					row[field] = "L"
+					leave_per_person +=1 
 				current_date_row = add_days(current_date_row, 1)
+			row.update({'leave': leave_per_person})
 			row.update(col_data)
 		
 		rank = 1

@@ -34,7 +34,7 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
 
 	$(wrapper).html(filters_html);
 
-	// Load dropdowns
+	// Load dropdowns for Academic Counselor and Product
 	frappe.call({
 		method: "frappe.client.get_list",
 		args: {
@@ -63,7 +63,7 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
 		}
 	});
 
-	// On click Apply Filters
+	// Apply Filters event
 	$('#apply_filters').on('click', function () {
 		let start_date = $('#start_date').val();
 		let end_date = $('#end_date').val();
@@ -78,44 +78,83 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
 		$("#sales_chart").show();
 		$("#sales_chart_2").show();
 
-		// First Chart: Sales Champions
+		// First Chart: Sales Champions (Pie chart)
 		frappe.call({
 			method: "enrollment.enrollment.page.sales_tracker.report_data.get_sales_champions",
 			args: { start_date, end_date },
 			callback: function (r) {
 				if (r.message) {
-					let labels_1 = r.message[0];
-					let values_1 = r.message[1];
+					let labels_1 = r.message[0];  // Array of labels
+					let values_1 = r.message[1];  // Array of values
 
-					new frappe.Chart("#sales_chart", {
-						title: "Sales Champions",
-						data: {
-							labels: labels_1,
-							datasets: [{ name: "Target Progress", values: values_1 }]
-						},
-						type: 'pie',
-						height: 300,
-						colors: ['#5e64ff']
-					});
+					// Debugging the data
+					console.log('Sales Champions Data:', labels_1, values_1);
 
-					let labels_2 = r.message[2];
-					let values_2 = r.message[3];
-
-					new frappe.Chart("#sales_chart_2", {
-						title: "Top Performers",
-						data: {
-							labels: labels_2,
-							datasets: [{ name: "Top Performers", values: values_2 }]
-						},
-						type: 'bar',
-						height: 300,
-						colors: ['#ff6363'],
-					});
+					// Check if the data exists
+					if (labels_1 && values_1) {
+						// Render Pie Chart
+						new frappe.Chart("#sales_chart", {
+							title: "Sales Champions",
+							data: {
+								labels: labels_1,
+								datasets: [{
+									name: "Target Progress",
+									values: values_1
+								}]
+							},
+							type: 'pie',
+							height: 300,
+							colors: ['#5e64ff']
+						});
+					}
 				}
 			}
 		});
 
-		// Sales Tracker Report
+		// Second Chart: Top Performers (Bar chart)
+		frappe.call({
+			method: "enrollment.enrollment.page.sales_tracker.report_data.get_sales_champions",
+			args: { start_date, end_date },
+			callback: function (r) {
+				if (r.message) {
+					let labels_2 = r.message[2];  // Array of labels
+					let values_2 = r.message[3];  // Array of values
+
+					// Debugging the data
+					console.log('Top Performers Data:', labels_2, values_2);
+
+					// Check if the data exists
+					if (labels_2 && values_2) {
+						// Render Bar Chart
+						new frappe.Chart("#sales_chart_2", {
+							title: "Top Performers",
+							data: {
+								labels: labels_2,
+								datasets: [{
+									name: "Top Performers",
+									values: values_2
+								}]
+							},
+							type: 'bar',
+							height: 300,
+							colors: ['#ff6363'],
+							barOptions: {
+								spaceRatio: 0.3,  // Space between bars
+								stacked: true      // Stack bars
+							},
+							axisOptions: {
+								xAxisMode: "tick",  // X-axis in ticks mode
+								yAxisMode: "span",  // Y-axis in span mode
+								xIsSeries: true     // X-axis as series
+							},
+							valuesOverPoints: true  // Display values over bars
+						});
+					}
+				}
+			}
+		});
+
+		// Sales Tracker Report (Table)
 		frappe.call({
 			method: "enrollment.enrollment.page.sales_tracker.report_data.execute",
 			args: { start_date, end_date, sales_person: acad_coun, product: product },
@@ -141,15 +180,12 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
                                     <th>ACR</th>
                                     <th>Installment</th>
                                     <th>Installment Collection</th>`;
-
 					r.message[1].forEach(day => {
 						html += `<th>${day}</th>`;
 					});
-
 					html += `</tr>
                             </thead>
                             <tbody>`;
-
 					r.message[0].forEach(row => {
 						html += `<tr>
                             <td>${row.acad_coun}</td>
@@ -167,22 +203,18 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
                             <td>${row.acr }</td>
                             <td>${row.installment}</td>
                             <td>${row.installment_collection}</td>`;
-
 						r.message[1].forEach(day => {
 							html += `<td>${row[day]}</td>`;
 						});
-
 						html += `</tr>`;
 					});
-
 					html += `</tbody></table>`;
-
 					$(wrapper).find("#sales-tracker-table").html(html);
 				}
 			}
 		});
 
-		// SFR Tracker Report
+		// SFR Tracker Report (Table)
 		frappe.call({
 			method: "enrollment.enrollment.page.sales_tracker.report_data.sfr_tracker",
 			args: { start_date, end_date, sales_person: acad_coun, product: product },
@@ -200,15 +232,12 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
 									<th>Leave</th>
                                     <th>Target Sfr</th>
                                     <th>Actual Sfr</th>`;
-
 					r.message[1].forEach(day => {
 						html += `<th>${day}</th>`;
 					});
-
 					html += `</tr>
                             </thead>
                             <tbody>`;
-
 					r.message[0].forEach(row => {
 						html += `<tr>
                             <td>${row.sales_person}</td>
@@ -218,16 +247,12 @@ frappe.pages['sales-tracker'].on_page_load = function (wrapper) {
 							<td>${row.leave}</td>
                             <td>${row.target_sfr}</td>
                             <td>${row.sfr}</td>`;
-						
 						r.message[1].forEach(day => {
 							html += `<td>${row[day]}</td>`;
 						});
-
 						html += `</tr>`;
 					});
-
 					html += `</tbody></table>`;
-
 					$(wrapper).find("#sfr-tracker-table").html(html);
 				}
 			}

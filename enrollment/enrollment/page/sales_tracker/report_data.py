@@ -192,85 +192,91 @@ def get_sales_champions(start_date, end_date):
 
 @frappe.whitelist()
 def sfr_tracker(start_date, end_date, sales_person, product):
-	columns = [{}]
-	date_field = {}
-	days = []
-	data = []
-	month = datetime.strptime(str(start_date), "%Y-%m-%d").month
-	sfr_data = (
-		frappe.qb.from_(sa)
-		.left_join(spt).on(sa.sales_person == spt.sales_person)
-		.left_join(mt).on(mt.parent == spt.name)
-		.select(sa.sales_person, Sum(sa.total_sale_value).as_("sale_value"), mt.target, mt.target_sfr,  Sum(sa.connected_calls).as_("sfr"))
-		.groupby(sa.sales_person)
-		.where((sa.date_of_sale>= start_date) & (sa.date_of_sale<= end_date))
-		.where(months_num[month] == mt.month)
-		
-		
-	)
-	
-	if  start_date and end_date:
-		date_field = set_dates(start_date, end_date, columns)
-		if sales_person:
-			sfr_data =sfr_data.where(sa.sales_person == sales_person)
-		sfr_data = sfr_data.run(as_dict=1)
-		sfr_sorted_data = sorted(sfr_data, key=lambda x: x['sfr'], reverse=True)
-		for row in sfr_sorted_data:#query sorted sfr in desc order
-			row['progress'] = round((row['sale_value'] / row['target'] * 100), 2)
-			row['sfr_perc'] = round((row['sfr'] / int(row['target_sfr'])) * 100, 2)
-			
-			daywise_query = (
-			    	frappe.qb
-			    	.from_(sa)
-			    	.select(sa.date_of_sale, Sum(sa.connected_calls).as_("connected_calls"))
-			    	.where(
-					(sa.date_of_sale >= start_date) &
-					(sa.date_of_sale <= end_date) &
-					(sa.sales_person == row["sales_person"])
-			    	)
-			    	.groupby((sa.date_of_sale) &(sa.sales_person))
-			    	.run(as_dict=1)
-		    	)
-			
-			for day_row in daywise_query:
-					date_key = day_row.get("date_of_sale")
-					if date_key and date_key in date_field:
-						row[date_field[date_key]] = day_row.get("connected_calls") or 0
-						
-			
-			data.append(row)
-		
-		for row in sfr_data:
-			current_date_row = getdate(start_date)
-			col_data = {} 
-			leave_per_person = 0
-			while current_date_row <= getdate(end_date):
-				label = current_date_row.strftime("%B %-d")
-				col_data[label] = row.get(date_field.get(current_date_row)) or 0
-				emp = frappe.db.get_value("Sales Person", {"name": row["sales_person"]}, 'employee')
-				status = frappe.db.get_value("Attendance", {"employee": emp, "attendance_date": current_date_row}, "status")
-				field = (datetime.strptime(str(current_date_row), "%Y-%m-%d") + timedelta(days=1)).strftime("day_%Y_%m_%d")
-									
-				if status == "On Leave" or status == "Absent":
-					row[field] = "L"
-					leave_per_person +=1 
-				current_date_row = add_days(current_date_row, 1)
-			row.update({'leave': leave_per_person})
-			row.update(col_data)
-		
-		rank = 1
-		previous_sfr = None
-		for idx, row in enumerate(sfr_sorted_data):
-			if row['sfr'] != previous_sfr:
-				rank = idx + 1
-				previous_sfr = row['sfr']
-			row['rank'] = rank
-		
-		for col in columns:
-			if col:
-				days.append(col['label'])
+    columns = [{}]
+    date_field = {}
+    days = []
+    data = []
+    month = datetime.strptime(str(start_date), "%Y-%m-%d").month
 
-	return data, days
+    # Query to get SFR data
+    sfr_data = (
+        frappe.qb.from_(sa)
+        .left_join(spt).on(sa.sales_person == spt.sales_person)
+        .left_join(mt).on(mt.parent == spt.name)
+        .select(
+            sa.sales_person,
+            Sum(sa.total_sale_value).as_("sale_value"),
+            mt.target,
+            mt.target_sfr,
+            Sum(sa.connected_calls).as_("sfr")
+        )
+        .groupby(sa.sales_person)
+        .where((sa.date_of_sale >= start_date) & (sa.date_of_sale <= end_date))
+        .where(months_num[month] == mt.month)
+    )
+
+    if start_date and end_date:
+        date_field = set_dates(start_date, end_date, columns)
+
+        if sales_person:
+            sfr_data = sfr_data.where(sa.sales_person == sales_person)
+
+        sfr_data = sfr_data.run(as_dict=1)
+        sfr_sorted_data = sorted(sfr_data, key=lambda x: x['sfr'], reverse=True)
+
+        for row in sfr_sorted_data:
+            row['progress'] = round((row['sale_value'] / row['target'] * 100), 2) if row['target'] else 0
+            row['sfr_perc'] = round((row['sfr'] / int(row['target_sfr'])) * 100, 2) if row['target_sfr'] else 0
+
+            # Initialize leave count
+            leave_per_person = 0
+
+            # Fetch employee ID once
+            emp = frappe.db.get_value("Sales Person", {"name": row["sales_person"]}, 'employee')
+
+            # Loop through all days in range
+            current_date = getdate(start_date)
+            while current_date <= getdate(end_date):
+                label = current_date.strftime("%B %-d")
+
+                # Check attendance
+                status = frappe.db.get_value("Attendance", {
+                    "employee": emp,
+                    "attendance_date": current_date
+                }, "status")
+
+                # If absent/leave, put "L"
+                if status in ("On Leave", "Absent"):
+                    row[label] = "L"
+                    leave_per_person += 1
+                else:
+                    # Else fetch connected calls
+                    connected_calls = frappe.db.get_value("Sales Activity", {
+                        "sales_person": row["sales_person"],
+                        "date_of_sale": current_date
+                    }, "connected_calls") or 0
+                    row[label] = connected_calls
+
+                current_date = add_days(current_date, 1)
+
+            row["leave"] = leave_per_person
+            data.append(row)
+
+        # Ranking
+        rank = 1
+        previous_sfr = None
+        for idx, row in enumerate(sfr_sorted_data):
+            if row['sfr'] != previous_sfr:
+                rank = idx + 1
+                previous_sfr = row['sfr']
+            row['rank'] = rank
+
+        # Collect the day column headers
+        for col in columns:
+            if col:
+                days.append(col['label'])
+
+    return data, days
 
 def set_dates(start_date, end_date, columns):
 	start_date = getdate(start_date)
